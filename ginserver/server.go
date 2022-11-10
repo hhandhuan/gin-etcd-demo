@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/gin-gonic/gin"
 	"log"
 	"net/http"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	clientV3 "go.etcd.io/etcd/client/v3"
 )
 
@@ -22,25 +22,24 @@ var prefix = "services"
 // etcdEndpoint etcd 服务地址
 var etcdEndpoint = "127.0.0.1:2379"
 
-// serverName 该服务名字 该服务仅为用户服务
+// serverName 用户服务
 var serverName = "user"
 
-// serverHost gin 服务地址 注意这里仅仅本地测试地址
+// serverHost 服务地址
 var serverHost = "127.0.0.1"
 
 func main() {
 	flag.IntVar(&port, "servicePort", 8088, "")
 	flag.Parse()
 
-	go func() {
-		UserServiceRegistry()
-	}()
+	go func() { UserServiceRegistry() }()
 
+	gin.SetMode(gin.ReleaseMode)
 	engine := gin.Default()
 	// 获取用户信息接口
 	engine.GET("/user/info", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
-			"user":   gin.H{"username": "gin-etcd-demo"},
+			"user":   gin.H{"name": "gin-etcd-demo"},
 			"server": gin.H{"host": serverHost, "port": port},
 		})
 	})
@@ -70,24 +69,24 @@ func UserServiceRegistry() {
 
 	ttl := 10 // 租约10秒钟
 
-	leaseResponse, err := client.Grant(ctx, int64(ttl))
+	leaseRes, err := client.Grant(ctx, int64(ttl))
 	if err != nil {
-		log.Printf("etcd ceate lease error: %v", err)
+		log.Printf("etcd create lease error: %v", err)
 		return
 	}
 
-	log.Printf("crate lease %v", leaseResponse)
+	log.Printf("create lease %v", leaseRes)
 
-	putResponse, err := client.Put(ctx, key, val, clientV3.WithLease(leaseResponse.ID))
+	putRes, err := client.Put(ctx, key, val, clientV3.WithLease(leaseRes.ID))
 	if err != nil {
 		log.Printf("etcd lease put error: %v", err)
 		return
 	}
 
-	log.Printf("put response %v", putResponse)
+	log.Printf("put response %v", putRes)
 
 	// 保持租约不过期
-	klRes, err := client.KeepAlive(ctx, leaseResponse.ID)
+	klRes, err := client.KeepAlive(ctx, leaseRes.ID)
 	if err != nil {
 		panic(err)
 	}

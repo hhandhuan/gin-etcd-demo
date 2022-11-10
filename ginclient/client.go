@@ -35,6 +35,7 @@ var services = map[string]map[string]string{
 }
 
 func main() {
+	gin.SetMode(gin.ReleaseMode)
 	engine := gin.Default()
 
 	go func() {
@@ -76,9 +77,10 @@ func main() {
 func serviceDiscovery() {
 	client, err := clientV3.New(clientV3.Config{
 		Endpoints:            []string{etcdEndpoint}, // etcd 服务仅单机节点
-		DialTimeout:          time.Second * 30,       // 与 etcd 服务建立的超时时间
+		DialTimeout:          time.Second * 10,       // 与 etcd 服务建立的超时时间
 		DialKeepAliveTimeout: time.Second * 30,       // 客户端等待保持连接探测响应的时间。如果在此期间没有收到响应，则连接将关闭
 	})
+
 	if err != nil {
 		log.Printf("etcd server conn error: %v", err)
 		return
@@ -89,15 +91,17 @@ func serviceDiscovery() {
 			ctx := context.Background()
 			serviceKey := fmt.Sprintf("%s/%s", serverPrefix, serviceName)
 			// 获取当前所有服务入口
-			getResponse, _ := client.Get(ctx, serviceKey, clientV3.WithPrefix())
-
+			getRes, err := client.Get(ctx, serviceKey, clientV3.WithPrefix())
+			if err != nil {
+				log.Printf("get response error: %v", err)
+				return
+			}
 			// 防止并发写
 			locker.Lock()
-			for _, v := range getResponse.Kvs {
+			for _, v := range getRes.Kvs {
 				services[serviceName][string(v.Key)] = string(v.Value)
 			}
 			locker.Unlock()
-
 			// 监听 key 变化
 			ch := client.Watch(ctx, serviceKey, clientV3.WithPrefix(), clientV3.WithPrevKV())
 			for v := range ch {
